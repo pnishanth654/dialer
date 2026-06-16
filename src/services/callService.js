@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { query } from '../db/pool.js';
 import { config } from '../config.js';
 
@@ -21,6 +22,54 @@ export async function getDefaultUserId() {
     );
     cachedDefaultUserId = r.rows[0].id;
     return cachedDefaultUserId;
+}
+
+/** The label/username for the current account (shown in the dashboard header). */
+export async function getMe(userId) {
+    const r = await query('SELECT label FROM users WHERE id = $1', [userId]);
+    return { label: r.rows[0]?.label || null };
+}
+
+/** Admin: list every keyed account with its username + call count. */
+export async function listAccounts() {
+    const r = await query(
+        `SELECT u.id, u.api_key AS key, u.label,
+                (SELECT COUNT(*) FROM calls c WHERE c.user_id = u.id)::int AS calls
+         FROM users u
+         WHERE u.api_key IS NOT NULL
+         ORDER BY u.label NULLS LAST, u.created_at`
+    );
+    return r.rows;
+}
+
+/** Admin: create an account (generates a key if none given) or re-label an existing key. */
+export async function createAccount(label, key) {
+    const finalKey = (key && key.trim()) ? key.trim() : 'bd_' + crypto.randomBytes(18).toString('hex');
+    const r = await query(
+        `INSERT INTO users (api_key, label) VALUES ($1, $2)
+         ON CONFLICT (api_key) DO UPDATE SET label = EXCLUDED.label
+         RETURNING id, api_key AS key, label`,
+        [finalKey, label || null]
+    );
+    return r.rows[0];
+}
+
+/** Admin: delete an account and ALL of its data (calls, contacts, backups). */
+export async function deleteAccount(id) {
+    await query('DELETE FROM calls WHERE user_id = $1', [id]);
+    await query('DELETE FROM contacts WHERE user_id = $1', [id]);
+    await query('DELETE FROM web3_backups WHERE user_id = $1', [id]);
+    const r = await query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
+    return { deleted: r.rowCount > 0 };
+}
+
+/** Admin: rename an account. */
+export async function setAccountLabel(id, label) {
+    const r = await query(
+        'UPDATE users SET label = $2 WHERE id = $1 RETURNING id, api_key AS key, label',
+        [id, label || null]
+    );
+    return r.rows[0] || null;
 }
 
 /**

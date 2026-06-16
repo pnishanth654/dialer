@@ -37,11 +37,23 @@ async function checkHealth() {
         el.className = 'status ' + (h.db ? 'ok' : 'bad');
     } catch { el.textContent = 'offline'; el.className = 'status bad'; }
 }
+let meLabel = null, isAdmin = false;
 function updateAccount(suffix) {
     const el = document.getElementById('acct'); const k = apiKey();
     if (!k) { el.textContent = 'no key set'; return; }
-    const masked = k.length > 12 ? k.slice(0, 10) + '…' : k;
-    el.textContent = 'acct ' + masked + (suffix ? ' · ' + suffix : '');
+    const who = meLabel || (k.length > 12 ? k.slice(0, 10) + '…' : k);
+    el.textContent = who + (suffix ? ' · ' + suffix : '');
+}
+async function loadMe() {
+    const nav = document.getElementById('navAccounts');
+    nav.style.display = 'none'; meLabel = null; isAdmin = false;
+    if (!apiKey()) { updateAccount(); return; }
+    try {
+        const me = await json('/me');
+        meLabel = me.label; isAdmin = me.admin;
+        if (isAdmin) nav.style.display = '';
+        updateAccount();
+    } catch { /* ignore */ }
 }
 async function loadStats() {
     const set = (id, v) => { document.getElementById(id).textContent = v; };
@@ -70,6 +82,7 @@ function refreshView(view) {
     if (view === 'calllog') loadCallLog(true);
     else if (view === 'contacts') loadContacts(document.getElementById('search').value);
     else if (view === 'companies') loadCompanies();
+    else if (view === 'accounts') loadAccounts();
 }
 function activeView() {
     const t = document.querySelector('.nav-item.active');
@@ -244,6 +257,64 @@ async function openCompany(name) {
     `);
 }
 
+// ---------- Accounts (admin) ----------
+function accountRow(a) {
+    const who = a.label || '(unnamed)';
+    return `<div class="row" style="cursor:default">
+        <div class="avatar" style="background:${avatarColor(a.label || a.key)}">${esc(initial(who))}</div>
+        <div class="row-main">
+            <input class="acct-label" data-id="${a.id}" value="${esc(a.label || '')}" placeholder="username" />
+            <div class="mono">${esc(a.key)}</div>
+        </div>
+        <div class="row-end">
+            <div style="display:flex;gap:6px;justify-content:flex-end">
+                <button class="chip" data-copy="${esc(a.key)}">Copy key</button>
+                <button class="chip" data-del="${a.id}" data-name="${esc(a.label || a.key)}" style="color:var(--red);border-color:var(--red)">Delete</button>
+            </div>
+            <div class="muted" style="font-size:12px;margin-top:6px">${a.calls} calls</div>
+        </div>
+    </div>`;
+}
+async function loadAccounts() {
+    const list = document.getElementById('accountList');
+    list.innerHTML = loadingHTML;
+    try {
+        const { accounts } = await json('/admin/accounts');
+        list.innerHTML = accounts.length ? accounts.map(accountRow).join('') : emptyHTML('No accounts yet', 'Create one above.');
+        list.querySelectorAll('.acct-label').forEach((inp) => inp.addEventListener('change', async () => {
+            try { await json('/admin/accounts/' + inp.dataset.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: inp.value.trim() }) }); loadMe(); }
+            catch (e) { alert('Rename failed: ' + e.message); }
+        }));
+        list.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', () => {
+            navigator.clipboard.writeText(b.dataset.copy); const t = b.textContent; b.textContent = 'Copied!'; setTimeout(() => { b.textContent = t; }, 1200);
+        }));
+        list.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+            if (!confirm(`Delete account "${b.dataset.name}" and ALL its calls? This cannot be undone.`)) return;
+            try { await json('/admin/accounts/' + b.dataset.del, { method: 'DELETE' }); loadAccounts(); loadStats(); }
+            catch (e) { alert('Delete failed: ' + e.message); }
+        }));
+    } catch (e) { list.innerHTML = emptyHTML('Could not load', e.message); }
+}
+document.getElementById('createAcct').addEventListener('click', async () => {
+    const label = document.getElementById('newLabel').value.trim();
+    const s = document.getElementById('acctStatus'); s.textContent = 'Creating…';
+    try {
+        const { account } = await json('/admin/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label }) });
+        s.textContent = `Created "${account.label || '(unnamed)'}" — key: ${account.key}  (copy & give to them)`;
+        document.getElementById('newLabel').value = ''; loadAccounts();
+    } catch (e) { s.textContent = 'Failed: ' + e.message; }
+});
+document.getElementById('addExisting').addEventListener('click', async () => {
+    const key = document.getElementById('addKey').value.trim();
+    const label = document.getElementById('addKeyLabel').value.trim();
+    if (!key) { alert('Enter a key'); return; }
+    try {
+        await json('/admin/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, label }) });
+        document.getElementById('addKey').value = ''; document.getElementById('addKeyLabel').value = '';
+        loadAccounts();
+    } catch (e) { alert('Failed: ' + e.message); }
+});
+
 // ---------- Drawer ----------
 function drawer(html) { document.getElementById('drawerBody').innerHTML = html; document.getElementById('drawer').classList.add('open'); }
 function closeDrawer() { document.getElementById('drawer').classList.remove('open'); }
@@ -273,11 +344,6 @@ document.getElementById('importBtn').addEventListener('click', async () => {
         loadStats(); refreshView(activeView());
     } catch (e) { status.textContent = 'Import failed: ' + e.message; }
 });
-document.getElementById('backupBtn').addEventListener('click', async () => {
-    const status = document.getElementById('backupStatus'); status.textContent = 'Backing up…';
-    try { const r = await json('/backup/web3', { method: 'POST' }); status.textContent = `Backed up ${r.callCount} calls — CID ${r.cid}`; }
-    catch (e) { status.textContent = 'Backup failed: ' + e.message; }
-});
 
 // ---------- Filters ----------
 function wireChips(groupId, onPick) {
@@ -298,10 +364,11 @@ const val = (id) => document.getElementById(id).value.trim();
 document.getElementById('apiKey').value = apiKey();
 document.getElementById('saveKey').addEventListener('click', () => {
     localStorage.setItem('apiKey', document.getElementById('apiKey').value.trim());
-    checkHealth(); loadStats(); refreshView(activeView());
+    checkHealth(); loadMe(); loadStats(); refreshView(activeView());
 });
 
 // ---------- Init ----------
 checkHealth();
+loadMe();
 loadStats();
 loadCallLog(true);

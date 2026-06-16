@@ -169,7 +169,9 @@ main { max-width: 1080px; margin: 18px auto 60px; padding: 0 24px; }
 .card input[type=file] { margin-top: 12px; font-size: 13px; max-width: 100%; }
 
 .muted { color: var(--muted); }
-.statusline { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.statusline { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); word-break: break-all; }
+.acct-label { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font: inherit; font-weight: 600; background: var(--surface); color: var(--text); width: 100%; max-width: 220px; }
+.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--muted); word-break: break-all; margin-top: 3px; }
 
 /* ---------- Empty / loading ---------- */
 .empty { padding: 48px 24px; text-align: center; color: var(--muted); }

@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { auth } from '../middleware/auth.js';
+import { auth, adminOnly } from '../middleware/auth.js';
 import {
     insertCalls, summaries, timeline, allCalls,
     companies, companyTimeline, getMeta, setMeta, callLog,
+    getMe, listAccounts, createAccount, setAccountLabel, deleteAccount,
 } from '../services/callService.js';
 import { runBackup, listBackups, restoreBackup } from '../services/backupService.js';
 import { buildExport } from '../services/exportService.js';
@@ -95,6 +96,28 @@ api.get('/export.:format', wrap(async (req, res) => {
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(buffer);
+}));
+
+// --- Account (who am I) + admin account management ---
+
+api.get('/me', wrap(async (req, res) => {
+    res.json({ ...(await getMe(req.userId)), admin: req.isAdmin });
+}));
+
+api.get('/admin/accounts', adminOnly, wrap(async (req, res) => {
+    res.json({ accounts: await listAccounts() });
+}));
+
+api.post('/admin/accounts', adminOnly, wrap(async (req, res) => {
+    res.json({ account: await createAccount(req.body?.label, req.body?.key) });
+}));
+
+api.put('/admin/accounts/:id', adminOnly, wrap(async (req, res) => {
+    res.json({ account: await setAccountLabel(req.params.id, req.body?.label) });
+}));
+
+api.delete('/admin/accounts/:id', adminOnly, wrap(async (req, res) => {
+    res.json(await deleteAccount(req.params.id));
 }));
 
 // --- Web3 backup ---

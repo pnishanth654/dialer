@@ -3,7 +3,6 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { config, hasDb } from './config.js';
 import { api } from './routes/api.js';
-import { scheduleDailyBackup } from './jobs/dailyBackup.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -33,6 +32,5 @@ app.use((err, _req, res, _next) => {
 
 app.listen(config.port, () => {
     console.log(`[server] Business Dialer API on http://localhost:${config.port}`);
-    console.log(`[server] db=${hasDb()} web3=${config.web3Provider}`);
-    scheduleDailyBackup();
+    console.log(`[server] db=${hasDb()}`);
 });

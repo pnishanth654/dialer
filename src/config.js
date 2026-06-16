@@ -5,6 +5,7 @@ export const config = {
     databaseUrl: process.env.DATABASE_URL || '',
     apiKey: process.env.API_KEY || '',
     requireApiKey: process.env.REQUIRE_API_KEY === 'true',
+    adminApiKey: process.env.ADMIN_API_KEY || '',
     defaultUserEmail: process.env.DEFAULT_USER_EMAIL || 'owner@local',
 
     backupEncryptionKey: process.env.BACKUP_ENCRYPTION_KEY || '',

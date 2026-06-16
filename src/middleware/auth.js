@@ -13,8 +13,15 @@ export async function auth(req, res, next) {
     }
     try {
         req.userId = await resolveUserId(key);
+        req.isAdmin = Boolean(config.adminApiKey) && key === config.adminApiKey;
         next();
     } catch (e) {
         next(e);
     }
+}
+
+/** Gate admin-only (account management) routes. */
+export function adminOnly(req, res, next) {
+    if (!req.isAdmin) return res.status(403).json({ error: 'admin only' });
+    next();
 }
