@@ -1,0 +1,25 @@
+{
+  "name": "business-dialer-server",
+  "version": "0.1.0",
+  "description": "Cloud archive + Web3 backup for Business Dialer lifetime call history",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "node src/db/migrate.js",
+    "genkey": "node -e \"console.log(require('node:crypto').randomBytes(32).toString('hex'))\"",
+    "selftest": "node src/selftest.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.1",
+    "node-cron": "^3.0.3",
+    "pdfkit": "^0.15.1",
+    "pg": "^8.13.1"
+  }
+}

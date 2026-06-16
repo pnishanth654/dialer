@@ -1,0 +1,22 @@
+# Render Blueprint — free Node web service for Business Dialer.
+# Connect this repo on render.com; it auto-detects this file.
+# Secrets (sync:false) are entered in the Render dashboard, never committed.
+services:
+  - type: web
+    name: business-dialer
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: REQUIRE_API_KEY
+        value: "true"
+      - key: PINATA_GATEWAY
+        value: https://gateway.pinata.cloud
+      - key: DATABASE_URL          # your Neon connection string
+        sync: false
+      - key: BACKUP_ENCRYPTION_KEY # copy the value from your local server/.env
+        sync: false
+      - key: PINATA_JWT            # optional: real IPFS backups (host disk is ephemeral)
+        sync: false
