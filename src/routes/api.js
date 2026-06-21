@@ -4,6 +4,7 @@ import {
     insertCalls, summaries, timeline, allCalls,
     companies, companyTimeline, getMeta, setMeta, callLog,
     getMe, listAccounts, createAccount, setAccountLabel, deleteAccount,
+    getSpeedDials, setSpeedDial, deleteSpeedDial,
 } from '../services/callService.js';
 import { runBackup, listBackups, restoreBackup } from '../services/backupService.js';
 import { buildExport } from '../services/exportService.js';
@@ -118,6 +119,20 @@ api.put('/admin/accounts/:id', adminOnly, wrap(async (req, res) => {
 
 api.delete('/admin/accounts/:id', adminOnly, wrap(async (req, res) => {
     res.json(await deleteAccount(req.params.id));
+}));
+
+// --- Speed dial (per account) ---
+
+api.get('/speeddials', wrap(async (req, res) => {
+    res.json({ speedDials: await getSpeedDials(req.userId) });
+}));
+
+api.put('/speeddials/:slot', wrap(async (req, res) => {
+    res.json({ speedDial: await setSpeedDial(req.userId, Number(req.params.slot), req.body?.number, req.body?.name) });
+}));
+
+api.delete('/speeddials/:slot', wrap(async (req, res) => {
+    res.json(await deleteSpeedDial(req.userId, Number(req.params.slot)));
 }));
 
 // --- Web3 backup ---

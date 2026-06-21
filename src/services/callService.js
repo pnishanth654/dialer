@@ -54,10 +54,37 @@ export async function createAccount(label, key) {
     return r.rows[0];
 }
 
+// --- Speed dial (per account) ---
+
+export async function getSpeedDials(userId) {
+    const r = await query(
+        'SELECT slot, number, name FROM speed_dials WHERE user_id = $1 ORDER BY slot',
+        [userId]
+    );
+    return r.rows;
+}
+
+export async function setSpeedDial(userId, slot, number, name) {
+    const r = await query(
+        `INSERT INTO speed_dials (user_id, slot, number, name, updated_at)
+         VALUES ($1, $2, $3, $4, now())
+         ON CONFLICT (user_id, slot) DO UPDATE SET number = EXCLUDED.number, name = EXCLUDED.name, updated_at = now()
+         RETURNING slot, number, name`,
+        [userId, slot, number, name || null]
+    );
+    return r.rows[0];
+}
+
+export async function deleteSpeedDial(userId, slot) {
+    await query('DELETE FROM speed_dials WHERE user_id = $1 AND slot = $2', [userId, slot]);
+    return { deleted: true };
+}
+
 /** Admin: delete an account and ALL of its data (calls, contacts, backups). */
 export async function deleteAccount(id) {
     await query('DELETE FROM calls WHERE user_id = $1', [id]);
     await query('DELETE FROM contacts WHERE user_id = $1', [id]);
+    await query('DELETE FROM speed_dials WHERE user_id = $1', [id]);
     await query('DELETE FROM web3_backups WHERE user_id = $1', [id]);
     const r = await query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
     return { deleted: r.rowCount > 0 };

@@ -18,6 +18,14 @@ const json = (path, opts) => api(path, opts).then((r) => r.json());
 const fmtDate = (ms) => new Date(Number(ms)).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 const fmtTime = (ms) => new Date(Number(ms)).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 const fmtDur = (s) => (s > 0 ? (s >= 60 ? Math.floor(s / 60) + 'm ' + (s % 60) + 's' : s + 's') : '—');
+const fmtTalk = (s) => { if (!s) return '0m'; const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60); return h > 0 ? `${h}h ${m}m` : `${m}m`; };
+const dayKey = (ms) => new Date(Number(ms)).toDateString();
+function dayLabel(ms) {
+    const d = new Date(Number(ms)), t = new Date(), y = new Date(); y.setDate(t.getDate() - 1);
+    if (d.toDateString() === t.toDateString()) return 'Today';
+    if (d.toDateString() === y.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+}
 const dirClass = (d) => (d === 'INCOMING' ? 'dir-in' : d === 'OUTGOING' ? 'dir-out' : 'dir-missed');
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const initial = (name) => (String(name).match(/[a-z0-9]/i) || ['#'])[0].toUpperCase();
@@ -91,7 +99,7 @@ function activeView() {
 
 // ---------- Call Log (paged + filtered) ----------
 const CL_PAGE = 100;
-let clOffset = 0, clLoading = false, clDone = false;
+let clOffset = 0, clLoading = false, clDone = false, clLastDay = '';
 let clRange = 'ALL', clDir = 'ALL', clQ = '';
 function clSince() {
     const day = 86400000, now = Date.now();
@@ -116,7 +124,7 @@ function callRow(c) {
         <div class="callicon ${cls}">${glyph}</div>
         <div class="row-main">
             <div class="row-title ${missed ? 'missed' : ''}">${esc(name)}</div>
-            <div class="row-sub">${fmtDate(c.startTime)} · ${fmtTime(c.startTime)} · ${sub}</div>
+            <div class="row-sub">${fmtTime(c.startTime)} · ${sub}</div>
         </div>
         <div class="row-end">
             <div class="dir-label ${cls}">${label}</div>
@@ -128,7 +136,7 @@ async function loadCallLog(reset = true) {
     const list = document.getElementById('callLogList');
     const more = document.getElementById('callLogMore');
     if (!apiKey()) { list.innerHTML = emptyHTML('Enter your account key', 'Use the key box at the top right, then Set.'); more.innerHTML = ''; updateAccount(); return; }
-    if (reset) { clOffset = 0; clDone = false; list.innerHTML = loadingHTML; }
+    if (reset) { clOffset = 0; clDone = false; clLastDay = ''; list.innerHTML = loadingHTML; }
     if (clLoading || clDone) return;
     clLoading = true;
     if (!reset) more.innerHTML = loadingHTML;
@@ -139,7 +147,14 @@ async function loadCallLog(reset = true) {
         if (reset) list.innerHTML = '';
         if (reset && calls.length === 0) { list.innerHTML = emptyHTML('No calls match', 'Try a different filter or sync from the phone.'); }
         else {
-            list.insertAdjacentHTML('beforeend', calls.map(callRow).join(''));
+            // Group rows under Today / Yesterday / date headers (continues across pages).
+            let html = '';
+            calls.forEach((c) => {
+                const d = dayKey(c.startTime);
+                if (d !== clLastDay) { html += `<div class="daygroup">${esc(dayLabel(c.startTime))}</div>`; clLastDay = d; }
+                html += callRow(c);
+            });
+            list.insertAdjacentHTML('beforeend', html);
             list.querySelectorAll('.row[data-n]').forEach((el) => { el.onclick = () => openContact(el.dataset.n); });
         }
         clOffset += calls.length;
@@ -191,6 +206,17 @@ async function openContact(n) {
     const first = calls.length ? calls[calls.length - 1] : null;
     const count = (d) => calls.filter((c) => (d === 'MISSED' ? (c.direction === 'MISSED' || c.direction === 'REJECTED') : c.direction === d)).length;
     const tagOptions = TAGS.map((t) => `<option value="${t}" ${m.tag === t ? 'selected' : ''}>${t || '— none —'}</option>`).join('');
+    // Talk time + 14-day activity (Truecaller / CRM pattern)
+    const talk = calls.reduce((a, c) => a + (Number(c.durationSec) || 0), 0);
+    const DAYS = 14, midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+    const buckets = new Array(DAYS).fill(0);
+    calls.forEach((c) => {
+        const d = new Date(Number(c.startTime)); d.setHours(0, 0, 0, 0);
+        const diff = Math.round((midnight - d) / 86400000);
+        if (diff >= 0 && diff < DAYS) buckets[DAYS - 1 - diff]++;
+    });
+    const bmax = Math.max(1, ...buckets);
+    const bars = buckets.map((v) => `<div class="bar" style="height:${Math.round(v / bmax * 100)}%"></div>`).join('');
     drawer(`
         <div class="d-head">
             <div class="avatar" style="background:${avatarColor(name)};width:52px;height:52px;font-size:20px">${esc(initial(name))}</div>
@@ -202,7 +228,13 @@ async function openContact(n) {
             <div class="pill"><b class="dir-out">${count('OUTGOING')}</b><span>Out</span></div>
             <div class="pill"><b class="dir-missed">${count('MISSED')}</b><span>Missed</span></div>
         </div>
-        <details class="form"><summary>Edit tag / company</summary>
+        <div class="kpis">
+            <div class="kpi"><b>${fmtTalk(talk)}</b><span>Talk time</span></div>
+            <div class="kpi"><b>${first ? fmtDate(first.startTime) : '—'}</b><span>First call</span></div>
+        </div>
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-top:8px">Activity · last 14 days</div>
+        <div class="activity">${bars}</div>
+        <details class="form" style="margin-top:14px"><summary>Edit tag / company</summary>
             <label>Display name</label><input id="m-name" value="${esc(m.displayName || '')}">
             <label>Company</label><input id="m-company" value="${esc(m.company || '')}">
             <label>Department</label><input id="m-dept" value="${esc(m.department || '')}">

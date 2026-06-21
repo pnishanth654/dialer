@@ -55,6 +55,16 @@ CREATE TABLE IF NOT EXISTS contacts (
 
 CREATE INDEX IF NOT EXISTS contacts_company_idx ON contacts (user_id, company);
 
+-- Per-account speed dial (slots 1-9), so it follows the user across phones.
+CREATE TABLE IF NOT EXISTS speed_dials (
+    user_id     UUID NOT NULL REFERENCES users(id),
+    slot        INTEGER NOT NULL,
+    number      TEXT NOT NULL,
+    name        TEXT,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, slot)
+);
+
 CREATE TABLE IF NOT EXISTS web3_backups (
     id          BIGSERIAL PRIMARY KEY,
     user_id     UUID NOT NULL REFERENCES users(id),
